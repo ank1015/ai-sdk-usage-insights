@@ -1,6 +1,6 @@
 {
   "name": "ai-sdk-usage-insights",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "description": "Usage logging middleware and dashboard companion for the AI SDK.",
   "main": "./dist/index.js",
@@ -67,15 +67,18 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     },
     "./dashboard": {
       "types": "./dist/dashboard/server.d.ts",
-      "import": "./dist/dashboard/server.js"
+      "import": "./dist/dashboard/server.js",
+      "default": "./dist/dashboard/server.js"
     },
     "./middleware": {
       "types": "./dist/usage-logger.d.ts",
-      "import": "./dist/usage-logger.js"
+      "import": "./dist/usage-logger.js",
+      "default": "./dist/usage-logger.js"
     },
     "./package.json": "./package.json"
   }

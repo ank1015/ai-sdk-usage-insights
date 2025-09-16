@@ -1,9 +1,3 @@
-import type {
-    LanguageModelV2Middleware,
-    LanguageModelV2CallOptions,
-    LanguageModelV2StreamPart,
-  } from '@ai-sdk/provider';
-
 import type { LoggerOptions, LLMCallRow, SaveFn } from './types.js';
 import { createSqliteHandle } from './db.js';
 
@@ -27,216 +21,51 @@ function extractTags(params: any): string[] | undefined {
   return Array.isArray(opt.tags) ? opt.tags : [String(opt.tags)];
 }
 
-/* -------------------------- helpers: normalize usage ------------------------- */
-function normUsage(u: any, bodyUsage?: any) {
-  // camelCase or snake_case sources
-  const inputTokens =
-    u?.inputTokens ?? u?.promptTokens ?? bodyUsage?.input_tokens ?? null;
 
-  const outputTokens =
-    u?.outputTokens ?? u?.completionTokens ?? bodyUsage?.output_tokens ?? null;
-
-  const totalTokens =
-    u?.totalTokens ?? bodyUsage?.total_tokens ??
-    (inputTokens != null && outputTokens != null ? inputTokens + outputTokens : null);
-
-  const cachedInputTokens =
-    u?.cachedInputTokens ??
-    bodyUsage?.input_tokens_details?.cached_tokens ??
-    null;
-
-  // reasoning tokens (often on output side)
-  const reasoningTokens =
-    u?.reasoningTokens ?? null;
-
-  const outputReasoningTokens =
-    bodyUsage?.output_tokens_details?.reasoning_tokens ??
-    u?.reasoningTokens ??
-    null;
-
-  return { inputTokens, outputTokens, totalTokens, cachedInputTokens, reasoningTokens, outputReasoningTokens };
-}
-
-/* -------------------------- helpers: input collation ------------------------- */
-function collapseInputTextFromPromptArray(promptArr: any[]): string {
-  return promptArr
-    .map((m: any) => {
-      const role = (m.role || 'message').toUpperCase();
-      const content = Array.isArray(m.content)
-        ? m.content.map((c: any) => c?.text ?? JSON.stringify(c)).join(' ')
-        : (m.content ?? '');
-      return `[${role}] ${content}`;
-    })
-    .join('\n');
-}
-
-function collapseInputText(params: any, requestBody?: any): string | undefined {
-  // 1) params.prompt can be array of messages
-  if (Array.isArray(params?.prompt)) {
-    return `${collapseInputTextFromPromptArray(params.prompt)}`;
-  }
-  // 2) nonstandard messages key
-  if (Array.isArray(params?.messages)) {
-    const sys = params?.system ? `\n[SYSTEM]\n${params.system}\n` : '';
-    const msgs = collapseInputTextFromPromptArray(params.messages);
-    return `${sys}${msgs}`;
-  }
-  // 3) classic prompt string
-  if (typeof params?.prompt === 'string') {
-    const sys = params?.system ? `\n[SYSTEM]\n${params.system}\n` : '';
-    return `${sys}[PROMPT]\n${params.prompt}`;
-  }
-  // 4) fall back to request.body.input if present
-  const input = requestBody?.input;
-  if (Array.isArray(input)) {
-    const msgs = input
-      .map((m: any) => `[${(m.role || 'message').toUpperCase()}] ${JSON.stringify(m.content)}`)
-      .join('\n');
-    return msgs;
-  }
-  return undefined;
-}
-
-
-/* ------------------------- helpers: output extraction ------------------------ */
-function extractTextFromResult(result: any): string | undefined {
-  // Prefer top-level text when present
-  if (typeof result?.text === 'string' && result.text.length > 0) return result.text;
-
-  // Fall back to result.content (array of { type: 'text' | 'reasoning', text })
-  if (Array.isArray(result?.content)) {
-    const textParts = result.content
-      .filter((c: any) => c?.type === 'text' && typeof c.text === 'string')
-      .map((c: any) => c.text);
-    if (textParts.length) return textParts.join('');
-  }
-  return undefined;
-}
-
-function extractTextFromResponseBody(body: any): { text?: string; reasoningText?: string } {
-  if (!body) return {};
-  // OpenAI Responses API style: body.output[] -> message.content[] -> { type: 'output_text', text }
-
-  const outputs = body.choices[0].message
-  const text = outputs.content
-  const reasoningText = outputs.reasoning_content
-  return { text, reasoningText };
-}
-
-/* ------------------------- helpers: tools extraction ------------------------- */
-function extractToolMeta(params: any, result: any, body: any) {
-  const requestTools = params?.tools ?? result?.request?.body?.tools;
-  const responseTools = body?.tools; // if provider echoes tools; some embed tool calls in messages
-  const toolNames: string[] = Array.isArray(requestTools)
-    ? requestTools.map((t: any) => t?.name).filter(Boolean)
-    : [];
-
-  // toolCount is best-effort; fall back to defined tools
-  let toolCount: number | null = null;
-  // If response includes explicit tool call records somewhere, you can parse here.
-  if (Array.isArray(responseTools)) toolCount = responseTools.length;
-  else if (Array.isArray(requestTools)) toolCount = requestTools.length;
-
-  const parallelToolCalls =
-    typeof body?.parallel_tool_calls === 'boolean'
-      ? body.parallel_tool_calls
-      : null;
-
-  return {
-    requestToolsJson: requestTools ?? null,
-    responseToolsJson: responseTools ?? null,
-    toolNames: toolNames.length ? toolNames : null,
-    toolCount,
-    parallelToolCalls,
-  };
-}
-
-/* --------------------------- helpers: param picking -------------------------- */
-function pickNumericParams(params: any, body: any) {
-  let temperature =
-    params?.temperature ??
-    body?.temperature ??
-    (typeof body?.text === 'object' && body?.temperature) ??
-    null;
-  
-  // Ensure temperature is a number or null, not boolean
-  if (typeof temperature === 'boolean') {
-    temperature = null;
-  }
-  
-  const topP = params?.topP ?? body?.top_p ?? null;
-  const maxOutputTokens = params?.maxOutputTokens ?? body?.max_output_tokens ?? null;
-  return { temperature, topP, maxOutputTokens };
-}
-
-
-
-
-export function createUsageLoggerMiddleware(options: LoggerOptions): LanguageModelV2Middleware {
+export function createUsageLoggerMiddleware(options: LoggerOptions) {
 
   const { save } = buildSaver(options);
   return {
 
-    async wrapGenerate({ doGenerate, params }) {
+    async wrapGenerate({ doGenerate, params, model }: { doGenerate: () => any, params: any, model: any }) {
       const started = Date.now();
       const tags = extractTags(params);
 
+
       try {
         const result: any = await doGenerate();
-        const body = result?.response?.body;
-        const bodyUsage = body?.usage;
 
-        // INPUT
-        const inputText = collapseInputText(params, result?.request?.body);
-        const promptJson = params?.prompt ?? null;
-        const inputJson = result?.request?.body ?? result?.request ?? params;
+        const requestBody = (typeof result.request.body === 'string') ? JSON.parse(result.request.body) : result.request.body;
 
-        // OUTPUT
-        let outputText = extractTextFromResult(result);
-        let reasoningText: string | undefined;
-        // if (!outputText) {
-          const { text: fallbackText, reasoningText: rt } = extractTextFromResponseBody(body);
-          outputText = outputText ?? fallbackText ;
-          reasoningText = rt;
-        // }
-        const contentJson = result?.content ?? null;
+        const modelId = requestBody.model ?? model.modelId ?? result.response.modelId ?? null;
 
-        // USAGE
-        const usage = normUsage(result?.usage, bodyUsage);
+        const inputArray = requestBody.messages ?? requestBody.input ?? params.prompt ?? [];
+        const inputText = inputArray.map((message: any) => JSON.stringify(message) ).join('\n');
 
-        // TOOLS
-        const tools = extractToolMeta(params, result, body);
+        const contentMessages = result.content ?? [];
+        const contentJson = contentMessages.map((message: any) => JSON.stringify(message)).join('\n');
 
-        // PARAMS
-        const paramsPicked = pickNumericParams(params, body);
+        const inputTokens = result.usage.inputTokens;
+        const outputTokens = result.usage.outputTokens;
+        const totalTokens = result.usage.totalTokens;
+        const cachedInputTokens = result.usage.cachedInputTokens;
+        const reasoningTokens = result.usage.reasoningTokens;
 
         const row: LLMCallRow = {
           timestamp: new Date(),
-          modelId: result.request.body.model ?? (result as any)?.response?.modelId ?? null,
+          modelId: modelId ,
           tags,
-
           inputText,
-          inputJson,
-          promptJson,
-
-          outputText: outputText ?? null,
-          outputJson: body ?? null,
           contentJson,
-          reasoningText: reasoningText ?? null,
-          reasoningJson: Array.isArray(result?.content)
-            ? result.content.filter((c: any) => c?.type === 'reasoning') : null,
-
-          ...usage,
-
-          requestToolsJson: tools.requestToolsJson,
-          responseToolsJson: tools.responseToolsJson,
-          toolCount: tools.toolCount,
-          toolNames: tools.toolNames,
-          parallelToolCalls: tools.parallelToolCalls,
-
-          temperature: paramsPicked.temperature,
-          topP: paramsPicked.topP,
-          maxOutputTokens: paramsPicked.maxOutputTokens,
+          inputTokens,
+          outputTokens,
+          totalTokens,
+          cachedInputTokens,
+          reasoningTokens,
+          requestToolsJson: params.tools ?? null,
+          temperature: params.temperature ?? null,
+          topP: params.topP ?? null,
+          maxOutputTokens: params.maxOutputTokens,
 
           finishReason: result?.finishReason ?? null,
           latencyMs: Date.now() - started,
@@ -256,32 +85,24 @@ export function createUsageLoggerMiddleware(options: LoggerOptions): LanguageMod
 
 
       } catch (err: any) {
+        const inputPrompt = params.prompt ?? [];
+        const inputText = inputPrompt.map((message: any) => (message.role + '\n' + (typeof message.content === 'string' ? message.content : JSON.stringify(message.content)))).join('\n');
+
         const row: LLMCallRow = {
           timestamp: new Date(),
-          modelId: (params as any)?.modelId,
+          modelId: model.modelId,
           tags: extractTags(params),
-          inputText: collapseInputText(params),
-          inputJson: params,
-          promptJson: params?.prompt ?? null,
+          inputText,
 
-          outputText: null,
-          outputJson: null,
           contentJson: null,
-          reasoningText: null,
-          reasoningJson: null,
 
           inputTokens: null,
           outputTokens: null,
           totalTokens: null,
           cachedInputTokens: null,
           reasoningTokens: null,
-          outputReasoningTokens: null,
 
           requestToolsJson: params?.tools ?? null,
-          responseToolsJson: null,
-          toolCount: null,
-          toolNames: Array.isArray(params?.tools) ? params.tools.map((t: any) => t?.name).filter(Boolean) : null,
-          parallelToolCalls: null,
 
           temperature: params?.temperature ?? null,
           topP: params?.topP ?? null,
@@ -302,71 +123,92 @@ export function createUsageLoggerMiddleware(options: LoggerOptions): LanguageMod
     },
 
 
-    async wrapStream({ doStream, params }) {
+    async wrapStream({ doStream, params, model }: { doStream: () => any, params: any, model: any }) {
       const started = Date.now();
       const tags = extractTags(params);
-      const { stream, ...rest }: any = await doStream();
+      const { stream, request, response }: any = await doStream();
 
-      const inputText = collapseInputText(params, rest?.request?.body);
-      const promptJson = params?.prompt ?? null;
 
-      let fullText = '';
-      let reasoningText: string | undefined;
+      let contentJson = '';
+      let warnings: any[] | null = null;
+      let error: any = null;
 
-      const transformStream = new TransformStream<LanguageModelV2StreamPart, LanguageModelV2StreamPart>({
+      const transformStream = new TransformStream<any>({
         transform(chunk, controller) {
-          if (chunk?.type === 'text-delta') {
-            fullText += chunk.delta;
+
+          if(chunk.type == 'reasoning-start'){
+            contentJson += 'Reasoning' + '\n'
           }
-          if (chunk?.type === 'reasoning-delta' && typeof (chunk as any).delta === 'string') {
-            reasoningText = (reasoningText ?? '') + (chunk as any).delta;
+          if(chunk.type == 'reasoning-delta'){
+            contentJson += chunk.delta
+          }
+          if(chunk.type == 'reasoning-end'){
+            contentJson += '\n'
+          }
+
+          if(chunk.type == 'text-start'){
+            contentJson += 'Model Response' + '\n'
+          }
+          if(chunk.type == 'text-delta'){
+            contentJson += chunk.delta
+          }
+          if(chunk.type == 'reasoning-end'){
+            contentJson += '\n'
+          }
+
+          if(chunk.type == 'tool-input-start'){
+            contentJson += 'Model Tool call' + '\n'
+          }
+          if(chunk.type == 'tool-input-delta'){
+            contentJson += chunk.delta
+          }
+          if(chunk.type == 'tool-input-end'){
+            contentJson += '\n'
+          }
+
+          if(chunk.type == 'stream-start'){
+            warnings = chunk.warnings
+          }
+          if(chunk.type == 'error'){
+            error = chunk.error
           }
           if (chunk?.type === 'finish') {
-            const body = (rest as any)?.response?.body;
-            const bodyUsage = (chunk as any)?.usage ?? body?.usage;
-            const usage = normUsage((chunk as any)?.usage, bodyUsage);
+            const modelId = request.body.model ?? model.modelId ??  null;
 
-            const tools = extractToolMeta(params, rest, body);
-            const paramsPicked = pickNumericParams(params, body);
+            const inputArray = request.body.messages ?? request.body.input ?? params.prompt ?? []; []
+            const inputText = inputArray.map((message: any) => JSON.stringify(message) ).join('\n');
+    
+            const inputTokens = chunk.usage.inputTokens ?? null;
+            const outputTokens = chunk.usage.outputTokens ?? null;
+            const totalTokens = chunk.usage.totalTokens ?? null;
+            const cachedInputTokens = chunk.usage.cachedInputTokens ?? null;
+            const reasoningTokens = chunk.usage.reasoningTokens ?? null;
 
             const row: LLMCallRow = {
               timestamp: new Date(),
-              modelId:(rest as any)?.request?.body.model ?? body?.model ?? null,
+              modelId: modelId,
               tags,
-
               inputText,
-              inputJson: (rest as any)?.request?.body ?? (rest as any)?.request ?? params,
-              promptJson,
+              contentJson: contentJson,
+              inputTokens,
+              outputTokens,
+              totalTokens,
+              cachedInputTokens,
+              reasoningTokens,
+              requestToolsJson: params.tools ?? null,
 
-              outputText: fullText || null,
-              outputJson: body ?? null,
-              contentJson: null,
-              reasoningText: reasoningText ?? null,
-              reasoningJson: null,
-
-              ...usage,
-
-              requestToolsJson: tools.requestToolsJson,
-              responseToolsJson: tools.responseToolsJson,
-              toolCount: tools.toolCount,
-              toolNames: tools.toolNames,
-              parallelToolCalls: tools.parallelToolCalls,
-
-              temperature: paramsPicked.temperature,
-              topP: paramsPicked.topP,
-              maxOutputTokens: paramsPicked.maxOutputTokens,
+              temperature: params.temperature ?? null,
+              topP: params.topP ?? null,
+              maxOutputTokens: params.maxOutputTokens ?? null,
 
               finishReason: (chunk as any)?.finishReason ?? null,
               latencyMs: Date.now() - started,
-              warnings: (rest as any)?.warnings ?? null,
-              requestId:
-                (rest as any)?.request?.id ??
-                (rest as any)?.response?.headers?.['x-request-id'] ??
-                null,
-              responseId: (rest as any)?.response?.id ?? null,
-              headersJson: (rest as any)?.response?.headers ?? null,
-              meta: (rest as any)?.providerMetadata ?? null,
-              error: null,
+              warnings: warnings,
+              requestId: request?.id ?? response?.headers?.['x-request-id'] ?? null,
+              responseId: response?.id ?? null,
+              headersJson: response?.headers ?? null,
+              meta: chunk.providerMetadata ?? null,
+              error: error,
             };
 
             // don't block stream - use setImmediate to ensure it runs
@@ -388,7 +230,7 @@ export function createUsageLoggerMiddleware(options: LoggerOptions): LanguageMod
         },
       });
 
-      return { stream: stream.pipeThrough(transformStream), ...rest };
+      return { stream: stream.pipeThrough(transformStream), request, response };
     },
 
   }

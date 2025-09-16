@@ -142,7 +142,6 @@
           <th scope="col">Model</th>
           <th scope="col">Tags</th>
           <th scope="col">Input</th>
-          <th scope="col">Output</th>
           <th scope="col">Tokens</th>
           <th scope="col">Latency</th>
           <th scope="col">Details</th>
@@ -163,7 +162,6 @@
               <% } %>
             </td>
             <td><div class="preview" title="<%= entry.inputPreview || '' %>"><%= entry.inputPreview || '—' %></div></td>
-            <td><div class="preview" title="<%= entry.outputPreview || '' %>"><%= entry.outputPreview || '—' %></div></td>
             <td><span class="muted"><%= entry.totalTokens != null ? entry.totalTokens : '—' %></span></td>
             <td><span class="muted"><%= entry.latencyMs != null ? `${entry.latencyMs} ms` : '—' %></span></td>
             <td><a class="button" href="/entries/<%= entry.id %>">Open</a></td>

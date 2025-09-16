@@ -45,24 +45,13 @@ type LlmCallTableRow = {
   model_id: string | null;
   tags_json: string | null;
   input_text: string | null;
-  input_json: string | null;
-  prompt_json: string | null;
-  output_text: string | null;
-  output_json: string | null;
   content_json: string | null;
-  reasoning_text: string | null;
-  reasoning_json: string | null;
   input_tokens: number | null;
   output_tokens: number | null;
   total_tokens: number | null;
   cached_input_tokens: number | null;
   reasoning_tokens: number | null;
-  output_reasoning_tokens: number | null;
   request_tools_json: string | null;
-  response_tools_json: string | null;
-  tool_count: number | null;
-  tool_names_json: string | null;
-  parallel_tool_calls: number | null;
   temperature: number | null;
   top_p: number | null;
   max_output_tokens: number | null;
@@ -91,7 +80,6 @@ type ListEntry = {
   modelId: string | null;
   tags: string[];
   inputPreview: string | null;
-  outputPreview: string | null;
   totalTokens: number | null;
   latencyMs: number | null;
 };
@@ -128,45 +116,9 @@ const COLUMN_SPECS: ColumnSpec[] = [
     type: 'multiline',
   },
   {
-    key: 'input_json',
-    label: 'Input JSON',
-    description: 'Raw request payload captured by the middleware.',
-    type: 'json',
-  },
-  {
-    key: 'prompt_json',
-    label: 'Prompt Structure',
-    description: 'Structured prompt/messages supplied in the request.',
-    type: 'json',
-  },
-  {
-    key: 'output_text',
-    label: 'Output Text',
-    description: 'Primary textual output returned by the model.',
-    type: 'multiline',
-  },
-  {
-    key: 'output_json',
-    label: 'Output JSON',
-    description: 'Complete response body from the provider.',
-    type: 'json',
-  },
-  {
     key: 'content_json',
     label: 'Content JSON',
     description: 'Structured content array provided by the SDK.',
-    type: 'json',
-  },
-  {
-    key: 'reasoning_text',
-    label: 'Reasoning Text',
-    description: 'Extracted reasoning segments returned by the model.',
-    type: 'multiline',
-  },
-  {
-    key: 'reasoning_json',
-    label: 'Reasoning JSON',
-    description: 'Structured reasoning payload captured from the SDK.',
     type: 'json',
   },
   {
@@ -200,40 +152,10 @@ const COLUMN_SPECS: ColumnSpec[] = [
     type: 'number',
   },
   {
-    key: 'output_reasoning_tokens',
-    label: 'Output Reasoning Tokens',
-    description: 'Reasoning tokens counted within output usage.',
-    type: 'number',
-  },
-  {
     key: 'request_tools_json',
     label: 'Requested Tools',
     description: 'Tools declared with the request payload.',
     type: 'json',
-  },
-  {
-    key: 'response_tools_json',
-    label: 'Tool Calls Returned',
-    description: 'Tool call payloads the provider responded with.',
-    type: 'json',
-  },
-  {
-    key: 'tool_count',
-    label: 'Tool Count',
-    description: 'Total number of tool calls executed.',
-    type: 'number',
-  },
-  {
-    key: 'tool_names_json',
-    label: 'Tool Names',
-    description: 'Names of the tools referenced during the call.',
-    type: 'json',
-  },
-  {
-    key: 'parallel_tool_calls',
-    label: 'Parallel Tool Calls',
-    description: 'Whether tool calls executed in parallel.',
-    type: 'boolean',
   },
   {
     key: 'temperature',
@@ -324,7 +246,7 @@ export async function startDashboardServer(options: DashboardServerOptions): Pro
   app.locals.formatDateTime = formatDateTime;
 
   const listStatement = db.prepare(
-    'SELECT id, timestamp, model_id, tags_json, input_text, output_text, total_tokens, latency_ms FROM llm_calls ORDER BY datetime(timestamp) DESC'
+    'SELECT id, timestamp, model_id, tags_json, input_text, total_tokens, latency_ms FROM llm_calls ORDER BY datetime(timestamp) DESC'
   );
   const detailStatement = db.prepare(
     'SELECT * FROM llm_calls WHERE id = ?'
@@ -339,7 +261,6 @@ export async function startDashboardServer(options: DashboardServerOptions): Pro
       modelId: row.model_id ?? null,
       tags: (safeParseJson(row.tags_json) as string[] | null) ?? [],
       inputPreview: row.input_text ? truncate(row.input_text, 140) : null,
-      outputPreview: row.output_text ? truncate(row.output_text, 140) : null,
       totalTokens: row.total_tokens ?? null,
       latencyMs: row.latency_ms ?? null,
     }));

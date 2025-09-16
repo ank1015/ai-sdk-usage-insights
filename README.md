@@ -17,8 +17,6 @@ npm install ai-sdk-usage-insights
 pnpm add ai-sdk-usage-insights
 ```
 
-This package declares `@ai-sdk/provider` as a peer dependency. Make sure it is installed in your project.
-
 ## Usage
 
 ### 1. Register the middleware

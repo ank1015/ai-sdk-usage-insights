@@ -1,0 +1,41 @@
+{
+  "name": "llm-usage-ts",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "SDK to track response, usage and costs for LLM's",
+  "main": "dist/index.js",
+  "bin": {
+    "llm-usage-ts": "dist/index.js"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -w -p tsconfig.json",
+    "start": "node dist/index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "files": [
+    "dist",
+    "views"
+  ],
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.3.0",
+    "i": "^0.3.7",
+    "npm": "^11.5.2",
+    "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^2.0.30",
+    "ai": "^5.0.23",
+    "better-sqlite3": "^12.2.0",
+    "commander": "^14.0.0",
+    "ejs": "^3.1.10",
+    "ejs-mate": "^4.0.0",
+    "express": "^5.1.0",
+    "zod": "^3.25.76"
+  }
+}

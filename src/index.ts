@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { Command, InvalidOptionArgumentError } from 'commander';
 import { pathToFileURL } from 'node:url';
 
@@ -5,6 +6,8 @@ import { startDashboardServer } from './dashboard/server.js';
 
 export { createUsageLoggerMiddleware } from './usage-logger.js';
 export { startDashboardServer } from './dashboard/server.js';
+export type { DashboardServerHandle, DashboardServerOptions } from './dashboard/server.js';
+export type { LoggerOptions, LLMCallRow, SaveFn, TokenUsageNormalized } from './types.js';
 
 if (isCliInvocation(import.meta.url)) {
   runCli().catch((error) => {
@@ -18,8 +21,8 @@ async function runCli(): Promise<void> {
   const program = new Command();
 
   program
-    .name('llm-usage-ts')
-    .description('Utilities for exploring and inspecting LLM usage logs');
+    .name('ai-sdk-usage')
+    .description('Dashboard and logging utilities for monitoring AI SDK usage and costs');
 
   program
     .command('dashboard')
@@ -27,12 +30,34 @@ async function runCli(): Promise<void> {
     .option('-p, --port <port>', 'Port to bind the dashboard server', '4545')
     .option('--host <host>', 'Host to bind the dashboard server', '127.0.0.1')
     .action(async (dbPath: string, options: { port?: string; host?: string }) => {
-      const port = options.port ? Number.parseInt(options.port, 10) : 4545;
-      if (!Number.isInteger(port) || port <= 0) {
-        throw new InvalidOptionArgumentError('Port must be a positive integer.');
+      const parsedPort = options.port ? Number.parseInt(options.port, 10) : 4545;
+      if (!Number.isInteger(parsedPort) || parsedPort <= 0 || parsedPort > 65535) {
+        throw new InvalidOptionArgumentError('Port must be an integer between 1 and 65535.');
       }
+
       const host = options.host ?? '127.0.0.1';
-      await startDashboardServer({ dbPath, port, host });
+      const handle = await startDashboardServer({ dbPath, port: parsedPort, host });
+
+      const shutdown = async () => {
+        try {
+          await handle.close();
+          process.exit(0);
+        } catch (error) {
+          // eslint-disable-next-line no-console
+          console.error(error instanceof Error ? error.message : error);
+          process.exit(1);
+        }
+      };
+
+      process.once('SIGINT', shutdown);
+      process.once('SIGTERM', shutdown);
+
+      // eslint-disable-next-line no-console
+      console.log(`Usage dashboard available at ${handle.url}`);
+      // eslint-disable-next-line no-console
+      console.log(`Reading data from ${handle.dbPath}`);
+      // eslint-disable-next-line no-console
+      console.log('Press Ctrl+C to stop the server.');
     });
 
   await program.parseAsync(process.argv);

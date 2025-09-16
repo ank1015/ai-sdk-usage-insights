@@ -98,7 +98,13 @@ export function createSqliteHandle(dirPath: string, fileName = 'llm-usage.db', e
     try {
       return JSON.stringify(value);
     } catch (err) {
-      console.warn('Failed to stringify value, converting to string:', err);
+      process.emitWarning(
+        err instanceof Error ? err.message : String(err),
+        {
+          code: 'LLM_USAGE_JSON_ENCODE',
+          detail: 'Falling back to string representation while persisting usage row.',
+        }
+      );
       return String(value);
     }
   };

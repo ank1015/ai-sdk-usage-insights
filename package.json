@@ -1,42 +1,82 @@
 {
-  "name": "llm-usage-ts",
-  "version": "0.1.0",
+  "name": "ai-sdk-usage-insights",
+  "version": "1.0.0",
   "type": "module",
-  "description": "SDK to track response, usage and costs for LLM's",
-  "main": "dist/index.js",
+  "description": "Usage logging middleware and dashboard companion for the AI SDK.",
+  "main": "./dist/index.js",
   "bin": {
-    "llm-usage-ts": "dist/index.js"
+    "ai-sdk-usage": "./dist/index.js"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -w -p tsconfig.json",
-    "start": "node dist/index.js"
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run lint",
+    "prepublishOnly": "npm run build"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "ai-sdk",
+    "llm",
+    "usage",
+    "middleware",
+    "analytics",
+    "dashboard",
+    "sqlite"
+  ],
+  "author": "Usage Insights Contributors",
+  "license": "MIT",
   "files": [
     "dist",
-    "views"
+    "views",
+    "README.md",
+    "LICENSE"
   ],
   "devDependencies": {
+    "@ai-sdk/provider": "^2.0.0",
     "@types/better-sqlite3": "^7.6.13",
     "@types/express": "^5.0.3",
     "@types/node": "^24.3.0",
-    "i": "^0.3.7",
-    "npm": "^11.5.2",
     "typescript": "^5.9.2"
   },
   "dependencies": {
-    "@ai-sdk/deepseek": "^1.0.18",
-    "@ai-sdk/openai": "^2.0.30",
-    "ai": "^5.0.23",
     "better-sqlite3": "^12.2.0",
     "commander": "^14.0.0",
     "ejs": "^3.1.10",
     "ejs-mate": "^4.0.0",
-    "express": "^5.1.0",
-    "zod": "^3.25.76"
+    "express": "^5.1.0"
+  },
+  "types": "./dist/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/notacoder/ai-sdk-usage-insights.git"
+  },
+  "bugs": {
+    "url": "https://github.com/notacoder/ai-sdk-usage-insights/issues"
+  },
+  "homepage": "https://github.com/notacoder/ai-sdk-usage-insights#readme",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18.17"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {
+    "@ai-sdk/provider": "^2.0.0"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./dashboard": {
+      "types": "./dist/dashboard/server.d.ts",
+      "import": "./dist/dashboard/server.js"
+    },
+    "./middleware": {
+      "types": "./dist/usage-logger.d.ts",
+      "import": "./dist/usage-logger.js"
+    },
+    "./package.json": "./package.json"
   }
 }

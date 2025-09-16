@@ -6,7 +6,6 @@ import type {
 
 import type { LoggerOptions, LLMCallRow, SaveFn } from './types.js';
 import { createSqliteHandle } from './db.js';
-import util from 'util'
 
 /* -------------------------- helpers: storage builder ------------------------- */
 function buildSaver(options: LoggerOptions): { save: SaveFn; targetPath: string;} {
@@ -375,7 +374,13 @@ export function createUsageLoggerMiddleware(options: LoggerOptions): LanguageMod
               try {
                 await save(row);
               } catch (err) {
-                console.error('Failed to save stream data to DB:', err);
+                process.emitWarning(
+                  err instanceof Error ? err.message : String(err),
+                  {
+                    code: 'LLM_USAGE_STREAM_SAVE_FAILURE',
+                    detail: 'Unable to persist streaming usage log row.',
+                  }
+                );
               }
             });
           }

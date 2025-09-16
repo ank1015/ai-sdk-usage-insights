@@ -1,14 +1,26 @@
-import express from 'express';
+import express, { type Express } from 'express';
 import ejsMate from 'ejs-mate';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
+import type { Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
 
 export type DashboardServerOptions = {
   dbPath: string;
   port?: number;
   host?: string;
+};
+
+export type DashboardServerHandle = {
+  app: Express;
+  server: Server;
+  host: string;
+  port: number;
+  url: string;
+  dbPath: string;
+  close: () => Promise<void>;
 };
 
 type ColumnType =
@@ -291,7 +303,7 @@ const COLUMN_SPECS: ColumnSpec[] = [
   },
 ];
 
-export async function startDashboardServer(options: DashboardServerOptions): Promise<void> {
+export async function startDashboardServer(options: DashboardServerOptions): Promise<DashboardServerHandle> {
   const { dbPath, port = 4545, host = '127.0.0.1' } = options;
   if (!dbPath) {
     throw new Error('A path to the SQLite database must be provided.');
@@ -299,7 +311,7 @@ export async function startDashboardServer(options: DashboardServerOptions): Pro
 
   const absoluteDbPath = path.resolve(dbPath);
   if (!fs.existsSync(absoluteDbPath)) {
-    throw new Error(`No SQLite database found at \"${absoluteDbPath}\"`);
+    throw new Error(`No SQLite database found at "${absoluteDbPath}"`);
   }
 
   const db = new Database(absoluteDbPath, { readonly: true, fileMustExist: true });
@@ -362,24 +374,94 @@ export async function startDashboardServer(options: DashboardServerOptions): Pro
     });
   });
 
-  const server = app.listen(port, host, () => {
-    const url = `http://${host}:${port}`;
-    // eslint-disable-next-line no-console
-    console.log(`Usage dashboard running at ${url}`);
-    // eslint-disable-next-line no-console
-    console.log(`Reading data from ${absoluteDbPath}`);
-  });
+  let server: Server;
+  try {
+    server = await listenAsync(app, host, port);
+  } catch (err) {
+    db.close();
+    throw err;
+  }
 
-  const closeServer = () => {
-    server.close(() => {
-      db.close();
-      process.exit(0);
+  let closed = false;
+  const close = async (): Promise<void> => {
+    if (closed) return;
+    closed = true;
+
+    await new Promise<void>((resolve, reject) => {
+      server.close((maybeError?: Error) => {
+        if (maybeError) {
+          closed = false;
+          reject(maybeError);
+          return;
+        }
+        try {
+          db.close();
+        } catch (dbError) {
+          reject(dbError as Error);
+          return;
+        }
+        resolve();
+      });
     });
   };
 
-  process.once('SIGINT', closeServer);
-  process.once('SIGTERM', closeServer);
+  server.on('close', () => {
+    if (!closed) {
+      closed = true;
+      try {
+        db.close();
+      } catch {
+        // ignore close errors after shutdown
+      }
+    }
+  });
+
+  const address = server.address();
+  const addressInfo = typeof address === 'object' && address !== null ? (address as AddressInfo) : undefined;
+  const actualPort = addressInfo?.port ?? port;
+  const bindingHost = addressInfo?.address ?? host;
+  const publicHost = normaliseHostForUrl(bindingHost);
+  const url = `http://${formatHostnameForUrl(publicHost)}:${actualPort}`;
+
+  return {
+    app,
+    server,
+    host: bindingHost,
+    port: actualPort,
+    url,
+    dbPath: absoluteDbPath,
+    close,
+  };
 }
+
+
+function normaliseHostForUrl(host: string): string {
+  if (!host || host === '0.0.0.0' || host === '::') {
+    return '127.0.0.1';
+  }
+  return host;
+}
+
+function formatHostnameForUrl(host: string): string {
+  return host.includes(':') && !host.startsWith('[') ? `[${host}]` : host;
+}
+
+async function listenAsync(app: Express, host: string, port: number): Promise<Server> {
+  return await new Promise<Server>((resolve, reject) => {
+    const server = app.listen(port, host, () => {
+      server.off('error', handleError);
+      resolve(server);
+    });
+
+    function handleError(error: Error) {
+      server.off('error', handleError);
+      reject(error);
+    }
+
+    server.once('error', handleError);
+  });
+}
+
 
 function truncate(text: string, length: number): string {
   if (text.length <= length) return text;

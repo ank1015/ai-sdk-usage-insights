@@ -26,15 +26,9 @@ CREATE TABLE IF NOT EXISTS llm_calls (
 
   -- input
   input_text TEXT,
-  input_json TEXT,
-  prompt_json TEXT,
 
   -- output
-  output_text TEXT,
-  output_json TEXT,
   content_json TEXT,
-  reasoning_text TEXT,
-  reasoning_json TEXT,
 
   -- usage
   input_tokens INTEGER,
@@ -42,14 +36,9 @@ CREATE TABLE IF NOT EXISTS llm_calls (
   total_tokens INTEGER,
   cached_input_tokens INTEGER,
   reasoning_tokens INTEGER,
-  output_reasoning_tokens INTEGER,
 
   -- tools
   request_tools_json TEXT,
-  response_tools_json TEXT,
-  tool_count INTEGER,
-  tool_names_json TEXT,
-  parallel_tool_calls INTEGER,
 
   -- params
   temperature REAL,
@@ -81,10 +70,10 @@ export function createSqliteHandle(dirPath: string, fileName = 'llm-usage.db', e
 
   const columns = [
     'timestamp', 'model_id', 'tags_json',
-    'input_text', 'input_json', 'prompt_json',
-    'output_text', 'output_json', 'content_json', 'reasoning_text', 'reasoning_json',
-    'input_tokens', 'output_tokens', 'total_tokens', 'cached_input_tokens', 'reasoning_tokens', 'output_reasoning_tokens',
-    'request_tools_json', 'response_tools_json', 'tool_count', 'tool_names_json', 'parallel_tool_calls',
+    'input_text',
+    'content_json',
+    'input_tokens', 'output_tokens', 'total_tokens', 'cached_input_tokens', 'reasoning_tokens',
+    'request_tools_json',
     'temperature', 'top_p', 'max_output_tokens',
     'finish_reason', 'latency_ms', 'warnings_json', 'request_id', 'response_id', 'headers_json', 'meta_json', 'error_json',
   ];
@@ -128,27 +117,16 @@ export function createSqliteHandle(dirPath: string, fileName = 'llm-usage.db', e
       ensureSqliteCompatible(row.tags ? safeJsonStringify(row.tags) : null),
 
       ensureSqliteCompatible(row.inputText),
-      ensureSqliteCompatible(safeJsonStringify(row.inputJson)),
-      ensureSqliteCompatible(safeJsonStringify(row.promptJson)),
 
-      ensureSqliteCompatible(row.outputText),
-      ensureSqliteCompatible(safeJsonStringify(row.outputJson)),
       ensureSqliteCompatible(safeJsonStringify(row.contentJson)),
-      ensureSqliteCompatible(row.reasoningText),
-      ensureSqliteCompatible(safeJsonStringify(row.reasoningJson)),
 
       ensureSqliteCompatible(row.inputTokens),
       ensureSqliteCompatible(row.outputTokens),
       ensureSqliteCompatible(row.totalTokens),
       ensureSqliteCompatible(row.cachedInputTokens),
       ensureSqliteCompatible(row.reasoningTokens),
-      ensureSqliteCompatible(row.outputReasoningTokens),
 
       ensureSqliteCompatible(safeJsonStringify(row.requestToolsJson)),
-      ensureSqliteCompatible(safeJsonStringify(row.responseToolsJson)),
-      ensureSqliteCompatible(row.toolCount),
-      ensureSqliteCompatible(row.toolNames ? safeJsonStringify(row.toolNames) : null),
-      ensureSqliteCompatible(row.parallelToolCalls == null ? null : (row.parallelToolCalls ? 1 : 0)),
 
       ensureSqliteCompatible(row.temperature),
       ensureSqliteCompatible(row.topP),

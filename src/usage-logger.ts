@@ -117,27 +117,10 @@ function extractTextFromResult(result: any): string | undefined {
 function extractTextFromResponseBody(body: any): { text?: string; reasoningText?: string } {
   if (!body) return {};
   // OpenAI Responses API style: body.output[] -> message.content[] -> { type: 'output_text', text }
-  const outputs = Array.isArray(body.output) ? body.output : [];
-  let text: string | undefined;
-  let reasoningText: string | undefined;
 
-  for (const item of outputs) {
-    if (item?.type === 'message') {
-      const content = Array.isArray(item?.content) ? item.content : [];
-      const texts = content
-        .filter((c: any) => c?.type === 'output_text' && typeof c?.text === 'string')
-        .map((c: any) => c.text);
-      if (texts.length) text = (text ?? '') + texts.join('');
-    }
-    if (item?.type === 'reasoning') {
-      // Reasoning may come encrypted or summarized; capture the raw shape
-      const summary = item?.summary;
-      if (Array.isArray(summary) && summary.length) {
-        const s = summary.map((x: any) => (x?.text ?? JSON.stringify(x))).join(' ');
-        reasoningText = (reasoningText ?? '') + s;
-      }
-    }
-  }
+  const outputs = body.choices[0].message
+  const text = outputs.content
+  const reasoningText = outputs.reasoning_content
   return { text, reasoningText };
 }
 
@@ -171,11 +154,17 @@ function extractToolMeta(params: any, result: any, body: any) {
 
 /* --------------------------- helpers: param picking -------------------------- */
 function pickNumericParams(params: any, body: any) {
-  const temperature =
+  let temperature =
     params?.temperature ??
     body?.temperature ??
     (typeof body?.text === 'object' && body?.temperature) ??
     null;
+  
+  // Ensure temperature is a number or null, not boolean
+  if (typeof temperature === 'boolean') {
+    temperature = null;
+  }
+  
   const topP = params?.topP ?? body?.top_p ?? null;
   const maxOutputTokens = params?.maxOutputTokens ?? body?.max_output_tokens ?? null;
   return { temperature, topP, maxOutputTokens };
@@ -198,10 +187,6 @@ export function createUsageLoggerMiddleware(options: LoggerOptions): LanguageMod
         const body = result?.response?.body;
         const bodyUsage = body?.usage;
 
-        console.log(util.inspect(result, { depth: null, colors: true }));
-        console.log('###############')
-        console.log(util.inspect(params, { depth: null, colors: true }))
-
         // INPUT
         const inputText = collapseInputText(params, result?.request?.body);
         const promptJson = params?.prompt ?? null;
@@ -210,11 +195,11 @@ export function createUsageLoggerMiddleware(options: LoggerOptions): LanguageMod
         // OUTPUT
         let outputText = extractTextFromResult(result);
         let reasoningText: string | undefined;
-        if (!outputText) {
+        // if (!outputText) {
           const { text: fallbackText, reasoningText: rt } = extractTextFromResponseBody(body);
-          outputText = fallbackText ?? outputText;
+          outputText = outputText ?? fallbackText ;
           reasoningText = rt;
-        }
+        // }
         const contentJson = result?.content ?? null;
 
         // USAGE
@@ -331,7 +316,6 @@ export function createUsageLoggerMiddleware(options: LoggerOptions): LanguageMod
 
       const transformStream = new TransformStream<LanguageModelV2StreamPart, LanguageModelV2StreamPart>({
         transform(chunk, controller) {
-          console.log(util.inspect(chunk, { depth: null, colors: true }))
           if (chunk?.type === 'text-delta') {
             fullText += chunk.delta;
           }
@@ -348,7 +332,7 @@ export function createUsageLoggerMiddleware(options: LoggerOptions): LanguageMod
 
             const row: LLMCallRow = {
               timestamp: new Date(),
-              modelId: (chunk as any)?.response?.modelId ?? body?.model ?? null,
+              modelId:(rest as any)?.request?.body.model ?? body?.model ?? null,
               tags,
 
               inputText,
@@ -386,8 +370,14 @@ export function createUsageLoggerMiddleware(options: LoggerOptions): LanguageMod
               error: null,
             };
 
-            // don't block stream
-            Promise.resolve(save(row)).catch(() => {});
+            // don't block stream - use setImmediate to ensure it runs
+            setImmediate(async () => {
+              try {
+                await save(row);
+              } catch (err) {
+                console.error('Failed to save stream data to DB:', err);
+              }
+            });
           }
           controller.enqueue(chunk);
         },

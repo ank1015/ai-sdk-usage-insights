@@ -93,48 +93,72 @@ export function createSqliteHandle(dirPath: string, fileName = 'llm-usage.db', e
     `INSERT INTO llm_calls (${columns.join(',')}) VALUES (${placeholders})`
   );
 
+  const safeJsonStringify = (value: any): string | null => {
+    if (value == null || value === undefined) return null;
+    try {
+      return JSON.stringify(value);
+    } catch (err) {
+      console.warn('Failed to stringify value, converting to string:', err);
+      return String(value);
+    }
+  };
+
+  const ensureSqliteCompatible = (value: any): string | number | bigint | Buffer | null => {
+    if (value === null || value === undefined) return null;
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'bigint' || Buffer.isBuffer(value)) {
+      return value;
+    }
+    if (typeof value === 'boolean') {
+      return value ? 1 : 0; // Convert boolean to number
+    }
+    // For any other type, convert to string
+    return String(value);
+  };
+
   const save: SaveFn = async (row) => {
-    insert.run(
-      row.timestamp.toISOString(),
-      row.modelId ?? null,
-      row.tags ? JSON.stringify(row.tags) : null,
+    const values = [
+      ensureSqliteCompatible(row.timestamp.toISOString()),
+      ensureSqliteCompatible(row.modelId),
+      ensureSqliteCompatible(row.tags ? safeJsonStringify(row.tags) : null),
 
-      row.inputText ?? null,
-      row.inputJson != null ? JSON.stringify(row.inputJson) : null,
-      row.promptJson != null ? JSON.stringify(row.promptJson) : null,
+      ensureSqliteCompatible(row.inputText),
+      ensureSqliteCompatible(safeJsonStringify(row.inputJson)),
+      ensureSqliteCompatible(safeJsonStringify(row.promptJson)),
 
-      row.outputText ?? null,
-      row.outputJson != null ? JSON.stringify(row.outputJson) : null,
-      row.contentJson != null ? JSON.stringify(row.contentJson) : null,
-      row.reasoningText ?? null,
-      row.reasoningJson != null ? JSON.stringify(row.reasoningJson) : null,
+      ensureSqliteCompatible(row.outputText),
+      ensureSqliteCompatible(safeJsonStringify(row.outputJson)),
+      ensureSqliteCompatible(safeJsonStringify(row.contentJson)),
+      ensureSqliteCompatible(row.reasoningText),
+      ensureSqliteCompatible(safeJsonStringify(row.reasoningJson)),
 
-      row.inputTokens ?? null,
-      row.outputTokens ?? null,
-      row.totalTokens ?? null,
-      row.cachedInputTokens ?? null,
-      row.reasoningTokens ?? null,
-      row.outputReasoningTokens ?? null,
+      ensureSqliteCompatible(row.inputTokens),
+      ensureSqliteCompatible(row.outputTokens),
+      ensureSqliteCompatible(row.totalTokens),
+      ensureSqliteCompatible(row.cachedInputTokens),
+      ensureSqliteCompatible(row.reasoningTokens),
+      ensureSqliteCompatible(row.outputReasoningTokens),
 
-      row.requestToolsJson != null ? JSON.stringify(row.requestToolsJson) : null,
-      row.responseToolsJson != null ? JSON.stringify(row.responseToolsJson) : null,
-      row.toolCount ?? null,
-      row.toolNames ? JSON.stringify(row.toolNames) : null,
-      row.parallelToolCalls == null ? null : (row.parallelToolCalls ? 1 : 0),
+      ensureSqliteCompatible(safeJsonStringify(row.requestToolsJson)),
+      ensureSqliteCompatible(safeJsonStringify(row.responseToolsJson)),
+      ensureSqliteCompatible(row.toolCount),
+      ensureSqliteCompatible(row.toolNames ? safeJsonStringify(row.toolNames) : null),
+      ensureSqliteCompatible(row.parallelToolCalls == null ? null : (row.parallelToolCalls ? 1 : 0)),
 
-      row.temperature ?? null,
-      row.topP ?? null,
-      row.maxOutputTokens ?? null,
+      ensureSqliteCompatible(row.temperature),
+      ensureSqliteCompatible(row.topP),
+      ensureSqliteCompatible(row.maxOutputTokens),
 
-      row.finishReason ?? null,
-      row.latencyMs ?? null,
-      row.warnings ? JSON.stringify(row.warnings) : null,
-      row.requestId ?? null,
-      row.responseId ?? null,
-      row.headersJson ? JSON.stringify(row.headersJson) : null,
-      row.meta ? JSON.stringify(row.meta) : null,
-      row.error ? JSON.stringify(row.error) : null
-    );
+      ensureSqliteCompatible(row.finishReason),
+      ensureSqliteCompatible(row.latencyMs),
+      ensureSqliteCompatible(row.warnings ? safeJsonStringify(row.warnings) : null),
+      ensureSqliteCompatible(row.requestId),
+      ensureSqliteCompatible(row.responseId),
+      ensureSqliteCompatible(row.headersJson ? safeJsonStringify(row.headersJson) : null),
+      ensureSqliteCompatible(row.meta ? safeJsonStringify(row.meta) : null),
+      ensureSqliteCompatible(row.error ? safeJsonStringify(row.error) : null)
+    ];
+
+    insert.run(...values);
   };
 
   return { save, dbPath, db };

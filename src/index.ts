@@ -1,6 +1,4 @@
-#!/usr/bin/env node
 import { Command, InvalidOptionArgumentError } from 'commander';
-import { pathToFileURL } from 'node:url';
 
 import { startDashboardServer } from './dashboard/server.js';
 
@@ -9,15 +7,7 @@ export { startDashboardServer } from './dashboard/server.js';
 export type { DashboardServerHandle, DashboardServerOptions } from './dashboard/server.js';
 export type { LoggerOptions, LLMCallRow, SaveFn, TokenUsageNormalized } from './types.js';
 
-if (isCliInvocation(import.meta.url)) {
-  runCli().catch((error) => {
-    // eslint-disable-next-line no-console
-    console.error(error instanceof Error ? error.message : error);
-    process.exit(1);
-  });
-}
-
-async function runCli(): Promise<void> {
+export async function runCli(argv: string[] = process.argv): Promise<void> {
   const program = new Command();
 
   program
@@ -60,15 +50,5 @@ async function runCli(): Promise<void> {
       console.log('Press Ctrl+C to stop the server.');
     });
 
-  await program.parseAsync(process.argv);
-}
-
-function isCliInvocation(moduleUrl: string): boolean {
-  const entryPoint = process.argv?.[1];
-  if (!entryPoint) return false;
-  try {
-    return pathToFileURL(entryPoint).href === moduleUrl;
-  } catch {
-    return false;
-  }
+  await program.parseAsync(argv, { from: 'node' });
 }

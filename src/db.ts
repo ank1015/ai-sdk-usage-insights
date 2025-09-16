@@ -1,13 +1,13 @@
 // src/storage/sqlite-storage.ts
 import path from 'node:path';
 import fs from 'node:fs';
-import Database from 'better-sqlite3';
+import { Database } from 'bun:sqlite';
 import type { LLMCallRow, SaveFn } from './types.js';
 
 export type SqliteHandle = {
   save: SaveFn;
   dbPath: string;
-  db: Database.Database;
+  db: Database;
 };
 
 
@@ -75,7 +75,7 @@ export function createSqliteHandle(dirPath: string, fileName = 'llm-usage.db', e
   ensureDir(dirPath);
   const dbPath = path.join(dirPath, fileName);
   const db = new Database(dbPath);
-  if (enableWAL) db.pragma('journal_mode = WAL');
+  if (enableWAL) db.run('PRAGMA journal_mode = WAL');
   db.exec(DDL);
 
 

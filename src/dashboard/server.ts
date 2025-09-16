@@ -3,7 +3,7 @@ import ejsMate from 'ejs-mate';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import Database from 'better-sqlite3';
+import { Database } from 'bun:sqlite';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
@@ -314,7 +314,7 @@ export async function startDashboardServer(options: DashboardServerOptions): Pro
     throw new Error(`No SQLite database found at "${absoluteDbPath}"`);
   }
 
-  const db = new Database(absoluteDbPath, { readonly: true, fileMustExist: true });
+  const db = new Database(absoluteDbPath, { readonly: true });
 
   const app = express();
   app.engine('ejs', ejsMate as any);

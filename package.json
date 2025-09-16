@@ -1,6 +1,6 @@
 {
   "name": "ai-sdk-usage-insights-bun",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "description": "Usage logging middleware and dashboard companion for the AI SDK.",
   "main": "./dist/index.js",

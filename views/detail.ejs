@@ -112,7 +112,7 @@
           <% if (field.displayValue === '—') { %>
             <span class="placeholder">—</span>
           <% } else if (field.isPreformatted) { %>
-            <pre><%= field.displayValue %></pre>
+            <pre><%- field.displayValue %></pre>
           <% } else { %>
             <%= field.displayValue %>
           <% } %>

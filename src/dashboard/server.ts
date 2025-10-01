@@ -391,11 +391,35 @@ function truncate(text: string, length: number): string {
 
 function safeParseJson(value: string | null): unknown {
   if (value == null) return null;
-  try {
-    return JSON.parse(value);
-  } catch {
-    return value;
+
+  let current = value;
+  let attempts = 0;
+  const maxAttempts = 3; // Prevent infinite loops
+
+  // Try to parse multiple times in case of double/triple escaping
+  while (attempts < maxAttempts && typeof current === 'string') {
+    try {
+      const parsed = JSON.parse(current);
+
+      // If we successfully parsed and got a string, try parsing again
+      if (typeof parsed === 'string' && (
+        (parsed.trim().startsWith('{') && parsed.trim().endsWith('}')) ||
+        (parsed.trim().startsWith('[') && parsed.trim().endsWith(']'))
+      )) {
+        current = parsed;
+        attempts++;
+        continue;
+      }
+
+      // If we got an object/array, we're done
+      return parsed;
+    } catch {
+      // If parsing failed, return what we have
+      return current;
+    }
   }
+
+  return current;
 }
 
 function formatDateTime(value: string | null): string {
@@ -462,8 +486,17 @@ function formatFieldValue(value: unknown, type: ColumnType): { displayValue: str
         parsed = deepParseJsonStrings(parsed);
       }
 
+      const formatted = JSON.stringify(parsed, null, 2);
+      console.log('Formatting JSON field:', {
+        originalType: typeof value,
+        originalValue: typeof value === 'string' ? value.substring(0, 100) : JSON.stringify(value).substring(0, 100),
+        parsedType: typeof parsed,
+        formattedLength: formatted.length,
+        formattedPreview: formatted.substring(0, 100)
+      });
+
       return {
-        displayValue: JSON.stringify(parsed, null, 2),
+        displayValue: formatted,
         isPreformatted: true,
       };
     }

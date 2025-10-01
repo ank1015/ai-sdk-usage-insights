@@ -408,6 +408,46 @@ function formatDateTime(value: string | null): string {
   }).format(date);
 }
 
+function deepParseJsonStrings(obj: any): any {
+  if (obj === null || obj === undefined) {
+    return obj;
+  }
+
+  // If it's a string, try to parse it as JSON
+  if (typeof obj === 'string') {
+    const trimmed = obj.trim();
+    if ((trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+        (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        // Recursively parse the result
+        return deepParseJsonStrings(parsed);
+      } catch {
+        // Not valid JSON, return as-is
+        return obj;
+      }
+    }
+    return obj;
+  }
+
+  // If it's an array, recursively parse each element
+  if (Array.isArray(obj)) {
+    return obj.map(item => deepParseJsonStrings(item));
+  }
+
+  // If it's an object, recursively parse each property
+  if (typeof obj === 'object') {
+    const result: any = {};
+    for (const [key, value] of Object.entries(obj)) {
+      result[key] = deepParseJsonStrings(value);
+    }
+    return result;
+  }
+
+  // For primitives (number, boolean, etc.), return as-is
+  return obj;
+}
+
 function formatFieldValue(value: unknown, type: ColumnType): { displayValue: string; isPreformatted: boolean } {
   if (value == null) return { displayValue: '—', isPreformatted: false };
 
@@ -415,14 +455,44 @@ function formatFieldValue(value: unknown, type: ColumnType): { displayValue: str
     case 'datetime':
       return { displayValue: formatDateTime(String(value)), isPreformatted: false };
     case 'json': {
-      const parsed = typeof value === 'string' ? safeParseJson(value) : value;
+      let parsed = typeof value === 'string' ? safeParseJson(value) : value;
+
+      // Recursively parse any nested JSON strings
+      if (parsed && typeof parsed === 'object') {
+        parsed = deepParseJsonStrings(parsed);
+      }
+
       return {
         displayValue: JSON.stringify(parsed, null, 2),
         isPreformatted: true,
       };
     }
-    case 'multiline':
-      return { displayValue: String(value), isPreformatted: true };
+    case 'multiline': {
+      const stringValue = String(value);
+      const trimmed = stringValue.trim();
+
+      // Check if the content looks like JSON
+      if ((trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+          (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+        try {
+          let parsed = JSON.parse(trimmed);
+
+          // If the parsed result is an object with a nested JSON string, try to parse it recursively
+          if (parsed && typeof parsed === 'object') {
+            parsed = deepParseJsonStrings(parsed);
+          }
+
+          return {
+            displayValue: JSON.stringify(parsed, null, 2),
+            isPreformatted: true,
+          };
+        } catch {
+          // Not valid JSON, fall through to return as-is
+        }
+      }
+
+      return { displayValue: stringValue, isPreformatted: true };
+    }
     case 'boolean': {
       const numeric = typeof value === 'number' ? value : Number(value);
       if (Number.isNaN(numeric)) {
